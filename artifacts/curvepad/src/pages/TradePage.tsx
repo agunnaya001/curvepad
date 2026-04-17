@@ -20,6 +20,7 @@ import {
 } from "@/lib/web3";
 import { BondingCurveChart } from "@/components/BondingCurveChart";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { TerminalLog } from "@/components/TerminalLog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -192,6 +193,8 @@ export default function TradePage() {
                 height={280}
               />
             </div>
+
+            <TerminalLog tokenAddress={tokenAddress} symbol={symbol as string | undefined} />
 
             <div className="rounded-lg border border-border/40 bg-card/60 p-4">
               <h2 className="text-sm font-semibold text-foreground mb-3">Trade Activity</h2>

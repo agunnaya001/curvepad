@@ -16,10 +16,17 @@ export const config = createConfig({
   },
 });
 
-export const FACTORY_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+// TokenFactory deployed & verified on Base mainnet — block 44809260
+// https://basescan.org/address/0x479596943e70316A0d893De1876EBeA1Ea8E4D5B
+export const FACTORY_ADDRESS = "0x479596943e70316A0d893De1876EBeA1Ea8E4D5B" as `0x${string}`;
 
-export const BASE_PRICE = BigInt("1000000000000");
-export const SLOPE = BigInt("1000000");
+// Must match TokenFactory.sol constants exactly.
+// BASE_PRICE is wei per full token at supply=0.
+// SLOPE is wei-per-full-token increase per full token of supply.
+export const BASE_PRICE = BigInt("1000000000000"); // 1e12 — 0.000001 ETH / token
+export const SLOPE = BigInt("1000000");            // 1e6  — price rises 1e6 wei per token
+
+const WAD = BigInt(1e18);
 
 export const FACTORY_ABI = [
   {
@@ -156,6 +163,8 @@ export const BONDING_CURVE_ABI = [
   },
 ] as const;
 
+// ─── Formatting helpers ───────────────────────────────────────────────────────
+
 export function formatEth(wei: bigint, decimals = 6): string {
   const eth = Number(wei) / 1e18;
   if (eth === 0) return "0";
@@ -174,29 +183,55 @@ export function shortenAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+// ─── On-chain math (mirrors TokenFactory.sol exactly) ────────────────────────
+
+/**
+ * Tokens received (WAD) for ethIn wei sent to buy().
+ *
+ * Formula (mirrors contract _tokensForEth):
+ *   B = BASE_PRICE + SLOPE * (supply / WAD)            [wei per full token]
+ *   discriminant = B² + 2·SLOPE·ethForReserve           [full 256-bit, no WAD division]
+ *   x = (√discriminant − B) / SLOPE                     [full tokens]
+ *   result = x * WAD                                     [WAD units]
+ *
+ * ethIn is the TOTAL msg.value (reserve + 1% fee); fee is stripped here.
+ */
 export function calcBuyTokens(ethIn: bigint, currentSupply: bigint): bigint {
-  const ethInAfterFee = (ethIn * BigInt(99)) / BigInt(100);
-  const B = BASE_PRICE + SLOPE * currentSupply;
-  const discriminant = B * B + BigInt(2) * SLOPE * ethInAfterFee;
+  const ethForReserve = (ethIn * BigInt(99)) / BigInt(100); // strip 1% fee
+  const s = currentSupply / WAD;                            // full token count
+  const B = BASE_PRICE + SLOPE * s;                         // spot price
+  const discriminant = B * B + BigInt(2) * SLOPE * ethForReserve;
   const sqrtD = bigIntSqrt(discriminant);
   if (sqrtD <= B) return BigInt(0);
-  return ((sqrtD - B) * BigInt(1e18)) / SLOPE;
+  const xTokens = (sqrtD - B) / SLOPE;                     // full tokens
+  return xTokens * WAD;                                     // WAD
 }
 
+/**
+ * Net ETH received (wei) for selling tokenAmount WAD tokens.
+ *
+ * Formula (mirrors contract _ethForTokens + _reserveAt):
+ *   s = supply / WAD, x = tokenAmount / WAD  (full tokens)
+ *   reserve(s) = BASE_PRICE * s + SLOPE * s² / 2   [wei]
+ *   gross = reserve(s) − reserve(s − x)             [wei]
+ *   net = gross * 99 / 100                           [after 1% fee]
+ */
 export function calcSellReturn(tokenAmount: bigint, currentSupply: bigint): bigint {
   if (tokenAmount > currentSupply) return BigInt(0);
-  const supplyAfter = currentSupply - tokenAmount;
-  const reserveBefore =
-    BASE_PRICE * currentSupply + (SLOPE * currentSupply * currentSupply) / BigInt(2);
-  const reserveAfter =
-    BASE_PRICE * supplyAfter + (SLOPE * supplyAfter * supplyAfter) / BigInt(2);
-  const grossReturn = (reserveBefore - reserveAfter) / BigInt(1e18);
-  return (grossReturn * BigInt(99)) / BigInt(100);
+  const s = currentSupply / WAD;
+  const x = tokenAmount / WAD;
+  const supplyAfter = s - x;
+
+  const reserveBefore = BASE_PRICE * s + (SLOPE * s * s) / BigInt(2);
+  const reserveAfter = BASE_PRICE * supplyAfter + (SLOPE * supplyAfter * supplyAfter) / BigInt(2);
+  if (reserveAfter > reserveBefore) return BigInt(0);
+
+  const gross = reserveBefore - reserveAfter;
+  return (gross * BigInt(99)) / BigInt(100);
 }
 
 function bigIntSqrt(n: bigint): bigint {
-  if (n < BigInt(0)) return BigInt(0);
-  if (n === BigInt(0)) return BigInt(0);
+  if (n <= BigInt(0)) return BigInt(0);
   let x = n;
   let y = (x + BigInt(1)) / BigInt(2);
   while (y < x) {
@@ -205,6 +240,8 @@ function bigIntSqrt(n: bigint): bigint {
   }
   return x;
 }
+
+// ─── Curve plotting ───────────────────────────────────────────────────────────
 
 export function calcCurvePoints(
   currentSupply: bigint,

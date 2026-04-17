@@ -44,12 +44,14 @@ CurvePad is a permissionless bonding curve token launchpad on Base mainnet. Anyo
 - `artifacts/curvepad/src/components/BondingCurveChart.tsx` — Canvas-rendered live price chart
 - `artifacts/curvepad/src/components/ActivityFeed.tsx` — Live on-chain Trade event stream
 
-### Configuration
-After deploying the TokenFactory contract to Base mainnet, update:
-```typescript
-// artifacts/curvepad/src/lib/web3.ts
-export const FACTORY_ADDRESS = "0xYOUR_DEPLOYED_ADDRESS" as `0x${string}`;
-```
+### Deployed Contracts (Base Mainnet)
+- **TokenFactory**: `0x479596943e70316A0d893De1876EBeA1Ea8E4D5B`
+  - Block: 44809260
+  - Tx: `0x988c392651a5480176db68df6002fe55a949863d614948550bcc3df0aea13372`
+  - Verified: https://basescan.org/address/0x479596943e70316A0d893De1876EBeA1Ea8E4D5B
+
+### Live Terminal Feature
+- `artifacts/curvepad/src/components/TerminalLog.tsx` — macOS-style terminal panel on TradePage that streams on-chain Trade events in real time via watchContractEvent. Green for buys, red for sells, blinking cursor.
 
 ### Bonding Curve Math
 - `price(supply) = BASE_PRICE + SLOPE × supply`
