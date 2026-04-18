@@ -4,6 +4,28 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+// ─── Uniswap V2 Interfaces ────────────────────────────────────────────────────
+
+interface IUniswapV2Router02 {
+    function addLiquidityETH(
+        address token,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
+
+    function factory() external pure returns (address);
+    function WETH() external pure returns (address);
+}
+
+interface IUniswapV2Factory {
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// @title BondingCurveToken
 /// @notice An ERC-20 whose price follows a linear bonding curve.
 ///
@@ -11,44 +33,61 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 ///     s = totalSupply / WAD   (supply in full tokens, e.g. "1000 tokens")
 ///     price(s) = BASE_PRICE + SLOPE * s   [wei per 1 full token]
 ///
-///   Reserve invariant:
+///   Reserve invariant (pre-graduation):
 ///     ETH balance == ∫₀ˢ price(t) dt
 ///                 == BASE_PRICE * s + SLOPE * s² / 2
 ///
-///   The invariant holds because fees are taken FROM the trader (on top of the
-///   reserve contribution), never from the reserve itself.
+///   Fees are taken FROM the trader on top of the reserve contribution,
+///   never from the reserve itself.
 ///
 ///   Buy quadratic (x = tokens to mint):
 ///     SLOPE/2 · x²  +  B · x  −  ethForReserve = 0
 ///     x = (√(B² + 2·SLOPE·ethForReserve) − B) / SLOPE
-///   where B = BASE_PRICE + SLOPE · s   (spot price at current supply)
-///   The discriminant is computed at full 256-bit precision — no premature division.
+///   where B = BASE_PRICE + SLOPE · s
+///
+///   Graduation:
+///     When ETH reserve hits GRADUATION_THRESHOLD (10 ETH), anyone may call
+///     graduate(). This deploys reserve + freshly-minted tokens as permanent
+///     Uniswap V2 liquidity (LP tokens burned to the dead address).
 contract BondingCurveToken is ERC20, ReentrancyGuard {
-    // ─── Constants ──────────────────────────────────────────────────────────
+    // ─── Constants ────────────────────────────────────────────────────────────
 
-    /// @notice Starting price in wei per full token (1 token = 1e18 units).
-    ///         1e12 wei = 0.000001 ETH per token at supply=0.
-    uint256 public constant BASE_PRICE = 1_000_000_000_000; // 1e-6 ETH
+    /// @notice Starting price: 0.000001 ETH per token at supply = 0.
+    uint256 public constant BASE_PRICE = 1_000_000_000_000; // 1e12 wei
 
-    /// @notice Price slope in wei per full token, per full token of supply.
-    ///         i.e. price rises by 1e6 wei for every additional full token in supply.
-    uint256 public constant SLOPE = 1_000_000;
+    /// @notice Price slope: price rises by 1e6 wei per additional full token.
+    uint256 public constant SLOPE = 1_000_000; // 1e6 wei
 
-    /// @notice Creator fee in basis points.
-    uint256 public constant FEE_BPS = 100; // 1%
+    /// @notice Creator fee: 1% of every trade.
+    uint256 public constant FEE_BPS = 100;
+
+    /// @notice Graduation threshold: 10 ETH in reserve triggers liquidity deployment.
+    uint256 public constant GRADUATION_THRESHOLD = 10 ether;
+
+    /// @notice Uniswap V2 Router on Base mainnet.
+    address public constant UNISWAP_V2_ROUTER = 0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24;
+
+    /// @notice LP tokens sent here are permanently locked.
+    address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     uint256 private constant BPS_DENOM = 10_000;
     uint256 private constant WAD = 1e18;
 
-    // ─── State ──────────────────────────────────────────────────────────────
+    // ─── State ────────────────────────────────────────────────────────────────
 
-    /// @notice Receives 1% of every trade, forever.
+    /// @notice Receives 1% of every trade.
     address public immutable creator;
 
     /// @notice Cumulative ETH fees sent to creator.
     uint256 public creatorFeesEarned;
 
-    // ─── Events ─────────────────────────────────────────────────────────────
+    /// @notice True after graduation; buy() and sell() become disabled.
+    bool public graduated;
+
+    /// @notice Uniswap V2 pool address set at graduation (zero before).
+    address public uniswapPool;
+
+    // ─── Events ───────────────────────────────────────────────────────────────
 
     event Trade(
         address indexed trader,
@@ -58,7 +97,14 @@ contract BondingCurveToken is ERC20, ReentrancyGuard {
         uint256 newSupply
     );
 
-    // ─── Constructor ─────────────────────────────────────────────────────────
+    event Graduated(
+        address indexed pool,
+        uint256 ethLiquidity,
+        uint256 tokenLiquidity,
+        uint256 supplyAtGraduation
+    );
+
+    // ─── Constructor ──────────────────────────────────────────────────────────
 
     constructor(address _creator, string memory _name, string memory _symbol)
         ERC20(_name, _symbol)
@@ -67,11 +113,12 @@ contract BondingCurveToken is ERC20, ReentrancyGuard {
         creator = _creator;
     }
 
-    // ─── External: Buy ───────────────────────────────────────────────────────
+    // ─── External: Buy ────────────────────────────────────────────────────────
 
-    /// @notice Send ETH to buy tokens.
-    ///         msg.value = reserveContribution + 1% fee.
+    /// @notice Buy tokens on the bonding curve.
+    ///         msg.value = reserveContribution + 1% creator fee.
     function buy() external payable nonReentrant {
+        require(!graduated, "Graduated: trade on Uniswap");
         require(msg.value > 0, "Send ETH to buy");
 
         uint256 fee = (msg.value * FEE_BPS) / BPS_DENOM;
@@ -89,10 +136,11 @@ contract BondingCurveToken is ERC20, ReentrancyGuard {
         emit Trade(msg.sender, true, tokenAmount, ethForReserve, totalSupply());
     }
 
-    // ─── External: Sell ──────────────────────────────────────────────────────
+    // ─── External: Sell ───────────────────────────────────────────────────────
 
-    /// @notice Sell `tokenAmount` (in WAD units) and receive ETH minus 1% fee.
+    /// @notice Sell `tokenAmount` WAD tokens and receive ETH minus 1% fee.
     function sell(uint256 tokenAmount) external nonReentrant {
+        require(!graduated, "Graduated: trade on Uniswap");
         require(tokenAmount > 0, "Amount is zero");
         require(balanceOf(msg.sender) >= tokenAmount, "Insufficient balance");
         require(tokenAmount <= totalSupply(), "Exceeds supply");
@@ -115,19 +163,64 @@ contract BondingCurveToken is ERC20, ReentrancyGuard {
         emit Trade(msg.sender, false, tokenAmount, netEth, totalSupply());
     }
 
-    // ─── View ────────────────────────────────────────────────────────────────
+    // ─── External: Graduate ───────────────────────────────────────────────────
+
+    /// @notice Deploy bonding curve liquidity to Uniswap V2 when reserve >= 10 ETH.
+    ///         Callable by anyone once threshold is met.
+    ///         Mints tokens to match the graduation price, creates the Uniswap pool,
+    ///         and permanently locks LP tokens by sending them to the dead address.
+    function graduate() external nonReentrant {
+        require(!graduated, "Already graduated");
+        uint256 reserveEth = address(this).balance;
+        require(reserveEth >= GRADUATION_THRESHOLD, "Below graduation threshold");
+
+        // ── Effects first (checks-effects-interactions) ─────────────────────
+        graduated = true;
+        uint256 supplyAtGrad = totalSupply();
+
+        // Price (wei per WAD) at current supply
+        uint256 price = BASE_PRICE + (SLOPE * supplyAtGrad) / WAD;
+
+        // Tokens to mint for LP such that Uniswap price == bonding curve price:
+        //   reserveEth / (tokensForLP / WAD) = price / WAD
+        //   tokensForLP = reserveEth * WAD / price
+        uint256 tokensForLP = (reserveEth * WAD) / price;
+        require(tokensForLP > 0, "Zero LP tokens");
+
+        // ── Interactions ─────────────────────────────────────────────────────
+        _mint(address(this), tokensForLP);
+        _approve(address(this), UNISWAP_V2_ROUTER, tokensForLP);
+
+        IUniswapV2Router02(UNISWAP_V2_ROUTER).addLiquidityETH{value: reserveEth}(
+            address(this),
+            tokensForLP,
+            (tokensForLP * 90) / 100, // 10% token slippage tolerance
+            (reserveEth * 90) / 100,  // 10% ETH slippage tolerance
+            DEAD,                      // LP tokens permanently burned
+            block.timestamp + 300
+        );
+
+        // Retrieve pool address
+        address factory_ = IUniswapV2Router02(UNISWAP_V2_ROUTER).factory();
+        address weth = IUniswapV2Router02(UNISWAP_V2_ROUTER).WETH();
+        uniswapPool = IUniswapV2Factory(factory_).getPair(address(this), weth);
+
+        emit Graduated(uniswapPool, reserveEth, tokensForLP, supplyAtGrad);
+    }
+
+    // ─── View ─────────────────────────────────────────────────────────────────
 
     /// @notice Spot price in wei per full token at current supply.
     function getCurrentPrice() external view returns (uint256) {
         return _spotPrice(totalSupply());
     }
 
-    /// @notice Estimated tokens received for `ethAmount` wei as reserve contribution.
+    /// @notice Estimated tokens received for `ethAmount` wei (reserve contribution).
     function getBuyPrice(uint256 ethAmount) external view returns (uint256) {
         return _tokensForEth(ethAmount, totalSupply());
     }
 
-    /// @notice Estimated ETH received (after fee) for selling `tokenAmount` WAD tokens.
+    /// @notice Estimated ETH (after fee) for selling `tokenAmount` WAD tokens.
     function getSellReturn(uint256 tokenAmount) external view returns (uint256) {
         uint256 s = totalSupply();
         if (tokenAmount > s) return 0;
@@ -135,54 +228,65 @@ contract BondingCurveToken is ERC20, ReentrancyGuard {
         return gross - (gross * FEE_BPS) / BPS_DENOM;
     }
 
-    /// @notice Market cap = currentPrice × supply (both in wei / WAD → result in wei).
+    /// @notice Market cap = currentPrice × supply.
     function getMarketCap() external view returns (uint256) {
         return (_spotPrice(totalSupply()) * totalSupply()) / WAD;
     }
 
-    // ─── Internal: Math ──────────────────────────────────────────────────────
+    /// @notice Current ETH reserve (contract balance pre-graduation).
+    function getReserveEth() external view returns (uint256) {
+        return address(this).balance;
+    }
+
+    /// @notice All graduation-related state in one call — saves frontend round-trips.
+    function getGraduationInfo() external view returns (
+        bool _graduated,
+        address _pool,
+        uint256 _reserveEth,
+        uint256 _threshold,
+        uint256 _progressBps
+    ) {
+        _graduated = graduated;
+        _pool = uniswapPool;
+        _reserveEth = address(this).balance;
+        _threshold = GRADUATION_THRESHOLD;
+        uint256 r = _reserveEth;
+        _progressBps = r >= GRADUATION_THRESHOLD
+            ? 10_000
+            : (r * 10_000) / GRADUATION_THRESHOLD;
+    }
+
+    // ─── Internal: Math ───────────────────────────────────────────────────────
 
     /// @dev price(supplyWad) = BASE_PRICE + SLOPE * (supplyWad / WAD)
     function _spotPrice(uint256 supplyWad) internal pure returns (uint256) {
         return BASE_PRICE + (SLOPE * supplyWad) / WAD;
     }
 
-    /// @dev Reserve at supply S (in WAD):
-    ///      r(S) = BASE_PRICE * (S/WAD) + SLOPE * (S/WAD)^2 / 2
+    /// @dev Reserve at supply S (WAD):
+    ///      r(S) = BASE_PRICE * (S/WAD) + SLOPE * (S/WAD)² / 2
     function _reserveAt(uint256 supplyWad) internal pure returns (uint256) {
-        uint256 s = supplyWad / WAD; // full tokens (integer division intentional)
+        uint256 s = supplyWad / WAD;
         return BASE_PRICE * s + (SLOPE * s * s) / 2;
     }
 
-    /// @dev Tokens to mint (WAD) for `ethForReserve` wei injected at `currentSupplyWad`.
-    ///
+    /// @dev Tokens (WAD) to mint for `ethForReserve` wei at `currentSupplyWad`.
     ///      x (full tokens) = (√(B² + 2·SLOPE·ethForReserve) − B) / SLOPE
-    ///      where B = BASE_PRICE + SLOPE · (currentSupplyWad / WAD)
-    ///
-    ///      Discriminant uses full 256-bit precision before sqrt.
+    ///      Full 256-bit precision — no premature division.
     function _tokensForEth(uint256 ethForReserve, uint256 currentSupplyWad)
-        internal
-        pure
-        returns (uint256)
+        internal pure returns (uint256)
     {
         uint256 B = BASE_PRICE + (SLOPE * currentSupplyWad) / WAD;
-
-        // No division before sqrt — full 256-bit discriminant.
         uint256 discriminant = B * B + 2 * SLOPE * ethForReserve;
         uint256 sqrtD = _sqrt(discriminant);
-
         if (sqrtD <= B) return 0;
-
-        // x is in full tokens → convert to WAD
-        uint256 xTokens = (sqrtD - B) / SLOPE; // full tokens
+        uint256 xTokens = (sqrtD - B) / SLOPE;
         return xTokens * WAD;
     }
 
     /// @dev ETH (wei) redeemable for burning `amountWad` tokens at `currentSupplyWad`.
     function _ethForTokens(uint256 amountWad, uint256 currentSupplyWad)
-        internal
-        pure
-        returns (uint256)
+        internal pure returns (uint256)
     {
         if (amountWad > currentSupplyWad) return 0;
         uint256 reserveBefore = _reserveAt(currentSupplyWad);
@@ -190,7 +294,7 @@ contract BondingCurveToken is ERC20, ReentrancyGuard {
         return reserveBefore > reserveAfter ? reserveBefore - reserveAfter : 0;
     }
 
-    /// @dev Integer square root (Babylonian / Newton's method).
+    /// @dev Babylonian integer square root.
     function _sqrt(uint256 x) internal pure returns (uint256 z) {
         if (x == 0) return 0;
         z = x;
@@ -201,10 +305,12 @@ contract BondingCurveToken is ERC20, ReentrancyGuard {
         }
     }
 
-    // ─── Fallback ────────────────────────────────────────────────────────────
+    // ─── Fallback ─────────────────────────────────────────────────────────────
 
+    /// @dev Pre-graduation: reject raw ETH (must use buy()).
+    ///      Post-graduation: accept ETH (router refunds, etc.).
     receive() external payable {
-        revert("Use buy()");
+        if (!graduated) revert("Use buy()");
     }
 }
 
@@ -224,7 +330,7 @@ contract TokenFactory {
     );
 
     /// @notice Deploy a new bonding curve token.
-    ///         If msg.value > 0, it is used to seed-buy immediately after deploy.
+    ///         If msg.value > 0, it is used as a seed buy immediately after deploy.
     function createToken(string calldata _name, string calldata _symbol)
         external
         payable
