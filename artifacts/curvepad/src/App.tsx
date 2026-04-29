@@ -5,9 +5,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navbar } from "@/components/Navbar";
 import { config } from "@/lib/web3";
+import LandingPage from "@/pages/LandingPage";
 import ExplorePage from "@/pages/ExplorePage";
 import CreatePage from "@/pages/CreatePage";
 import TradePage from "@/pages/TradePage";
+import PortfolioPage from "@/pages/PortfolioPage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -24,8 +26,10 @@ function Router() {
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
       <Switch>
-        <Route path="/" component={ExplorePage} />
+        <Route path="/" component={LandingPage} />
+        <Route path="/explore" component={ExplorePage} />
         <Route path="/create" component={CreatePage} />
+        <Route path="/portfolio" component={PortfolioPage} />
         <Route path="/token/:address" component={TradePage} />
         <Route component={NotFound} />
       </Switch>

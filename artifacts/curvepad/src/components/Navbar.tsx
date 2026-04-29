@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { shortenAddress, formatEth } from "@/lib/web3";
-import { Zap, ChevronDown, LogOut, Copy, ExternalLink } from "lucide-react";
+import { Zap, ChevronDown, LogOut, Copy, ExternalLink, Briefcase } from "lucide-react";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -45,9 +45,19 @@ export function Navbar() {
           <div className="hidden sm:flex items-center gap-1">
             <Link href="/">
               <span
-                data-testid="link-explore"
+                data-testid="link-home"
                 className={`text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer transition-colors ${
                   location === "/" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                }`}
+              >
+                Home
+              </span>
+            </Link>
+            <Link href="/explore">
+              <span
+                data-testid="link-explore"
+                className={`text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer transition-colors ${
+                  location === "/explore" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 Explore
@@ -68,50 +78,63 @@ export function Navbar() {
 
         <div className="flex items-center gap-2">
           {isConnected && address ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <>
+              <Link href="/portfolio">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-8 text-xs border-primary/30 hover:border-primary/60 hover:bg-primary/5 gap-2"
-                  data-testid="button-wallet-connected"
+                  className="h-8 text-xs hidden sm:flex gap-2"
+                  data-testid="link-portfolio"
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  {balance && (
-                    <span className="text-muted-foreground hidden sm:inline">
-                      {formatEth(balance.value, 4)} ETH
-                    </span>
-                  )}
-                  <span className="font-mono">{shortenAddress(address)}</span>
-                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  <Briefcase className="w-4 h-4" />
+                  Portfolio
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={copyAddress} data-testid="menu-copy-address">
-                  <Copy className="w-3.5 h-3.5 mr-2" />
-                  {copied ? "Copied!" : "Copy address"}
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a
-                    href={`https://basescan.org/address/${address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="link-basescan"
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs border-primary/30 hover:border-primary/60 hover:bg-primary/5 gap-2"
+                    data-testid="button-wallet-connected"
                   >
-                    <ExternalLink className="w-3.5 h-3.5 mr-2" />
-                    View on BaseScan
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => disconnect()}
-                  className="text-destructive focus:text-destructive"
-                  data-testid="button-disconnect"
-                >
-                  <LogOut className="w-3.5 h-3.5 mr-2" />
-                  Disconnect
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    {balance && (
+                      <span className="text-muted-foreground hidden sm:inline">
+                        {formatEth(balance.value, 4)} ETH
+                      </span>
+                    )}
+                    <span className="font-mono">{shortenAddress(address)}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={copyAddress} data-testid="menu-copy-address">
+                    <Copy className="w-3.5 h-3.5 mr-2" />
+                    {copied ? "Copied!" : "Copy address"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={`https://basescan.org/address/${address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="link-basescan"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-2" />
+                      View on BaseScan
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => disconnect()}
+                    className="text-destructive focus:text-destructive"
+                    data-testid="button-disconnect"
+                  >
+                    <LogOut className="w-3.5 h-3.5 mr-2" />
+                    Disconnect
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

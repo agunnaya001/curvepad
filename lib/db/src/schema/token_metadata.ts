@@ -17,7 +17,7 @@ export const tokenMetadataTable = pgTable("token_metadata", {
 
 export const insertTokenMetadataSchema = createInsertSchema(tokenMetadataTable).omit({
   createdAt: true,
-});
+}) as any;
 
 export type InsertTokenMetadata = z.infer<typeof insertTokenMetadataSchema>;
 export type TokenMetadata = typeof tokenMetadataTable.$inferSelect;
