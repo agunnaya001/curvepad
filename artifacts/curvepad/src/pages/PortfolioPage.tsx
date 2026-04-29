@@ -229,9 +229,9 @@ export default function PortfolioPage() {
                       tx.type === "buy" ? "bg-primary/20" : "bg-destructive/20"
                     }`}>
                       {tx.type === "buy" ? (
-                        <ArrowDownLeft className={`w-5 h-5 ${tx.type === "buy" ? "text-primary" : "text-destructive"}`} />
+                        <ArrowDownLeft className="w-5 h-5 text-primary" />
                       ) : (
-                        <ArrowUpRight className={`w-5 h-5 ${tx.type === "buy" ? "text-primary" : "text-destructive"}`} />
+                        <ArrowUpRight className="w-5 h-5 text-destructive" />
                       )}
                     </div>
                     <div>

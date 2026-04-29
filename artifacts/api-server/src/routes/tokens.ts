@@ -6,7 +6,7 @@ import {
   insertTokenMetadataSchema,
   insertTokenCommentSchema,
 } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, ilike, or } from "drizzle-orm";
 
 const router = Router();
 
@@ -111,18 +111,20 @@ router.get("/tokens", async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
     const offset = parseInt(req.query.offset as string) || 0;
-    const search = (req.query.search as string || "").toLowerCase();
+    const search = (req.query.search as string || "").trim();
 
-    let query = db.select().from(tokenMetadataTable);
-    
-    if (search) {
-      query = query.where((table) =>
-        table.description?.like?.(`%${search}%`) || 
-        table.imageUrl?.like?.(`%${search}%`)
-      );
-    }
+    const whereCondition = search
+      ? or(
+          ilike(tokenMetadataTable.name, `%${search}%`),
+          ilike(tokenMetadataTable.symbol, `%${search}%`),
+          ilike(tokenMetadataTable.description, `%${search}%`)
+        )
+      : undefined;
 
-    const rows = await query
+    const rows = await db
+      .select()
+      .from(tokenMetadataTable)
+      .where(whereCondition as any)
       .orderBy(desc(tokenMetadataTable.createdAt))
       .limit(limit)
       .offset(offset);
