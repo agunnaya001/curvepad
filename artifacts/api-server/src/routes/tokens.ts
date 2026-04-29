@@ -106,4 +106,115 @@ router.post("/tokens/:address/comments", async (req, res) => {
   res.json(row);
 });
 
+// Get all tokens with metadata (paginated)
+router.get("/tokens", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const search = (req.query.search as string || "").toLowerCase();
+
+    let query = db.select().from(tokenMetadataTable);
+    
+    if (search) {
+      query = query.where((table) =>
+        table.description?.like?.(`%${search}%`) || 
+        table.imageUrl?.like?.(`%${search}%`)
+      );
+    }
+
+    const rows = await query
+      .orderBy(desc(tokenMetadataTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json({ data: rows, limit, offset, total: rows.length });
+  } catch (error) {
+    console.error("Error fetching tokens:", error);
+    res.status(500).json({ error: "Failed to fetch tokens" });
+  }
+});
+
+// Get trending tokens
+router.get("/trending", async (req, res) => {
+  try {
+    const timeWindow = req.query.window as string || "24h";
+    // For now return recent tokens as trending
+    const rows = await db
+      .select()
+      .from(tokenMetadataTable)
+      .orderBy(desc(tokenMetadataTable.createdAt))
+      .limit(10);
+
+    res.json({ data: rows, window: timeWindow });
+  } catch (error) {
+    console.error("Error fetching trending:", error);
+    res.status(500).json({ error: "Failed to fetch trending tokens" });
+  }
+});
+
+// Search tokens
+router.get("/search", async (req, res) => {
+  try {
+    const query = (req.query.q as string || "").trim();
+    if (!query || query.length < 2) {
+      res.status(400).json({ error: "Query must be at least 2 characters" });
+      return;
+    }
+
+    const results = await db
+      .select()
+      .from(tokenMetadataTable)
+      .limit(20);
+
+    const filtered = results.filter((t) =>
+      (t.description?.toLowerCase() || "").includes(query.toLowerCase())
+    );
+
+    res.json({ data: filtered, query });
+  } catch (error) {
+    console.error("Error searching:", error);
+    res.status(500).json({ error: "Search failed" });
+  }
+});
+
+// Get token statistics
+router.get("/tokens/:address/stats", async (req, res) => {
+  const { address } = req.params;
+  if (!isValidAddress(address)) {
+    res.status(400).json({ error: "Invalid address" });
+    return;
+  }
+
+  try {
+    const metadata = await db
+      .select()
+      .from(tokenMetadataTable)
+      .where(eq(tokenMetadataTable.tokenAddress, address.toLowerCase()))
+      .limit(1);
+
+    if (!metadata.length) {
+      res.status(404).json({ error: "Token not found" });
+      return;
+    }
+
+    const comments = await db
+      .select()
+      .from(tokenCommentsTable)
+      .where(eq(tokenCommentsTable.tokenAddress, address.toLowerCase()));
+
+    res.json({
+      address,
+      metadata: metadata[0],
+      stats: {
+        commentCount: comments.length,
+        uniqueCommenters: new Set(comments.map((c) => c.commenterAddress)).size,
+        lastActivity: comments[0]?.createdAt || metadata[0]?.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching stats:", error);
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
 export default router;
