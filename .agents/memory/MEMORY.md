@@ -1,0 +1,3 @@
+- [CurvePad contracts](curvepad-contracts.md) — V1 factory live & verified on Base; V2 (graduation+Uniswap) ready to deploy once wallet is funded
+- [CurvePad multicall](curvepad-multicall.md) — ExplorePage uses publicClient.multicall (7 calls per token) + parallel getBalance for reserves
+- [CurvePad graduation](curvepad-graduation.md) — 10 ETH threshold; V2 contract + deploy script ready; deployer wallet needs ~0.001 ETH
