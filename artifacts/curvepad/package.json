@@ -76,6 +76,7 @@
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
+    "@workspace/object-storage-web": "workspace:*",
     "viem": "^2.48.0",
     "wagmi": "^3.6.2"
   }

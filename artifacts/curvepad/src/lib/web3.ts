@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { http, createConfig } from "wagmi";
 import { base } from "wagmi/chains";
 import { injected, walletConnect, coinbaseWallet } from "wagmi/connectors";
@@ -18,10 +20,10 @@ export const config = createConfig({
 
 // ─── Contract addresses ───────────────────────────────────────────────────────
 
-// V1 factory — deployed & verified on Base mainnet block 44809260
-// V2 (with graduation + Uniswap LP): ready to deploy, awaiting wallet funding
-// https://basescan.org/address/0x479596943e70316A0d893De1876EBeA1Ea8E4D5B
-export const FACTORY_ADDRESS = "0x479596943e70316A0d893De1876EBeA1Ea8E4D5B" as `0x${string}`;
+// V2 factory — deployed & verified on Base mainnet block 49276726
+// TX: 0x856811007d5dc6ea08f577fb98d61f1ac15e4e64e5af692850751425bf23df05
+// https://basescan.org/address/0x6EF504b98b4369C0a1aF4fD1885D7acCf843dDf6
+export const FACTORY_ADDRESS = "0x6EF504b98b4369C0a1aF4fD1885D7acCf843dDf6" as `0x${string}`;
 
 // V2 constants (same math as V1 + graduation added)
 export const BASE_PRICE = BigInt("1000000000000"); // 1e12 wei — 0.000001 ETH/token at supply=0

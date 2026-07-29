@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { useRef, useEffect, useState, useCallback } from "react";
 import { usePublicClient } from "wagmi";
 import { base } from "wagmi/chains";

@@ -45,10 +45,15 @@ CurvePad is a permissionless bonding curve token launchpad on Base mainnet. Anyo
 - `artifacts/curvepad/src/components/ActivityFeed.tsx` — Live on-chain Trade event stream
 
 ### Deployed Contracts (Base Mainnet)
-- **TokenFactory**: `0x479596943e70316A0d893De1876EBeA1Ea8E4D5B`
-  - Block: 44809260
-  - Tx: `0x988c392651a5480176db68df6002fe55a949863d614948550bcc3df0aea13372`
-  - Verified: https://basescan.org/address/0x479596943e70316A0d893De1876EBeA1Ea8E4D5B
+- **TokenFactory V1** (deprecated): `0x479596943e70316A0d893De1876EBeA1Ea8E4D5B`
+  - Block: 44809260 | No graduation support
+
+- **TokenFactory V2** (active): `0x6EF504b98b4369C0a1aF4fD1885D7acCf843dDf6`
+  - Block: 49276726
+  - Tx: `0x856811007d5dc6ea08f577fb98d61f1ac15e4e64e5af692850751425bf23df05`
+  - Deployer: `0xD034E94465Db1669f80D817c66e58cF194d027C8`
+  - Verified: https://basescan.org/address/0x6EF504b98b4369C0a1aF4fD1885D7acCf843dDf6
+  - Features: bonding curve + 10 ETH graduation → Uniswap V2 LP burn
 
 ### Live Terminal Feature
 - `artifacts/curvepad/src/components/TerminalLog.tsx` — macOS-style terminal panel on TradePage that streams on-chain Trade events in real time via watchContractEvent. Green for buys, red for sells, blinking cursor.

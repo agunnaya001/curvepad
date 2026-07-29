@@ -8,6 +8,7 @@ import "../src/TokenFactory.sol";
 
 /// @dev Deployed at a deterministic address and used via vm.etch in graduation tests.
 contract MockUniswapV2Router {
+
     address public immutable factoryAddr;
     address public immutable wethAddr;
 
@@ -33,6 +34,42 @@ contract MockUniswapV2Factory {
     address public immutable pair;
     constructor(address _pair) { pair = _pair; }
     function getPair(address, address) external view returns (address) { return pair; }
+}
+
+// ─── LP-tracking mock for burn-verification tests ─────────────────────────────
+
+/// @dev Minimal ERC-20 stub that records mint recipients so tests can assert LP burn.
+contract MockLPToken {
+    mapping(address => uint256) public balanceOf;
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+}
+
+/// @dev Router variant that mints `lpToken` to the `to` address on addLiquidityETH.
+contract MockUniswapV2RouterTracksLP {
+    address public immutable factoryAddr;
+    address public immutable wethAddr;
+    MockLPToken public lpToken; // storage slot 0 — set via vm.store after vm.etch
+
+    constructor(address _factory, address _weth, address _lp) {
+        factoryAddr = _factory;
+        wethAddr = _weth;
+        lpToken = MockLPToken(_lp);
+    }
+
+    function factory() external view returns (address) { return factoryAddr; }
+    function WETH() external view returns (address) { return wethAddr; }
+
+    function addLiquidityETH(
+        address, uint256, uint256, uint256, address to, uint256
+    ) external payable returns (uint256, uint256, uint256) {
+        uint256 lpAmt = 1e15;
+        lpToken.mint(to, lpAmt);
+        return (1e18, msg.value, lpAmt);
+    }
+
+    receive() external payable {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -365,5 +402,90 @@ contract TokenFactoryTest is Test {
         assertGt(progressBps, 0, "Progress should be > 0");
         assertLt(progressBps, 10_000, "Progress should be < 100%");
         assertApproxEqRel(progressBps, 5_000, 0.05e18, "Should be ~50% progress");
+    }
+
+    // ── 17. ETH reserve fully drained into Uniswap at graduation ──────────────
+
+    function test_ethFullyDrainedAfterGraduation() public {
+        BondingCurveToken token = _deployAndFillToThreshold();
+        uint256 reserveBefore = address(token).balance;
+        assertGe(reserveBefore, 10 ether, "Reserve must be >= 10 ETH before graduation");
+
+        token.graduate();
+
+        assertEq(address(token).balance, 0, "All ETH must leave the token contract on graduation");
+    }
+
+    // ── 18. LP tokens burned to the dead address ──────────────────────────────
+
+    function test_lpBurnedToDeadAddress() public {
+        // Deploy an LP-tracking router and etch it at the canonical ROUTER address
+        MockLPToken lpTok = new MockLPToken();
+        MockUniswapV2RouterTracksLP trackingRouter = new MockUniswapV2RouterTracksLP(
+            address(mockFactory), MOCK_WETH, address(lpTok)
+        );
+        vm.etch(ROUTER, address(trackingRouter).code);
+        // lpToken is stored at slot 0 in MockUniswapV2RouterTracksLP (non-immutable storage)
+        vm.store(ROUTER, bytes32(uint256(0)), bytes32(uint256(uint160(address(lpTok)))));
+
+        BondingCurveToken token = _deployAndFillToThreshold();
+        token.graduate();
+
+        address dead = 0x000000000000000000000000000000000000dEaD;
+        assertGt(lpTok.balanceOf(dead), 0, "LP tokens must be burned to the DEAD address");
+    }
+
+    // ── 19. Graduation is permissionless — any address can trigger it ──────────
+
+    function test_anyoneCanGraduate() public {
+        BondingCurveToken token = _deployAndFillToThreshold();
+
+        address randomCaller = address(0xAAAA);
+        vm.prank(randomCaller);
+        token.graduate(); // must not revert for a non-buyer, non-creator caller
+
+        assertTrue(token.graduated(), "Token should be graduated after permissionless call");
+    }
+
+    // ── 20. Full lifecycle: deploy → buy → graduate → trading permanently locked
+
+    function test_fullGraduationLifecycle() public {
+        // 1. Deploy a fresh token
+        vm.prank(creator);
+        address tokenAddr = factory.createToken("Lifecycle", "LCY");
+        BondingCurveToken token = _token(tokenAddr);
+
+        assertFalse(token.graduated(), "Should not be graduated at deploy");
+        assertEq(token.uniswapPool(), address(0), "Pool should be zero before graduation");
+
+        // 2. Two buyers drive the reserve to the threshold
+        vm.prank(buyer1);
+        token.buy{value: 7 ether}();
+
+        vm.prank(buyer2);
+        token.buy{value: 4 ether}(); // crosses 10 ETH threshold
+
+        (bool grad, , uint256 reserve, , ) = token.getGraduationInfo();
+        assertFalse(grad, "Not graduated yet — graduate() not called");
+        assertGe(reserve, 10 ether, "Reserve must be at or above graduation threshold");
+
+        // 3. Anyone can trigger graduation
+        token.graduate();
+
+        assertTrue(token.graduated(), "Should be graduated after graduate()");
+        assertEq(token.uniswapPool(), MOCK_POOL, "Pool address must be set to the Uniswap pair");
+        assertEq(address(token).balance, 0, "ETH reserve must be drained into Uniswap");
+
+        // 4. Bonding-curve trading is permanently locked
+        vm.prank(buyer1);
+        vm.expectRevert("Graduated: trade on Uniswap");
+        token.buy{value: 0.1 ether}();
+
+        uint256 bal2 = token.balanceOf(buyer2);
+        if (bal2 > 0) {
+            vm.prank(buyer2);
+            vm.expectRevert("Graduated: trade on Uniswap");
+            token.sell(bal2);
+        }
     }
 }

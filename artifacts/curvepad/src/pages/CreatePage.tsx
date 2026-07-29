@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
+import { useState, useEffect, useRef } from "react";
 import { useAccount, useConnect, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther } from "viem";
 import { useLocation } from "wouter";
 import { FACTORY_ADDRESS, FACTORY_ABI, BASE_PRICE, SLOPE } from "@/lib/web3";
 import { saveTokenMetadata } from "@/lib/api";
+import { useUpload } from "@workspace/object-storage-web";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +26,8 @@ import {
   Globe,
   Send,
   ImageIcon,
+  Upload,
+  X,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -41,6 +46,30 @@ export default function CreatePage() {
   const [website, setWebsite] = useState("");
   const [seedEth, setSeedEth] = useState("");
   const [metaSaved, setMetaSaved] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading, progress } = useUpload({
+    onSuccess: (response) => {
+      // objectPath is /objects/uploads/{uuid}; strip /objects prefix to build serving URL
+      const servingPath = response.objectPath.replace(/^\/objects\//, "");
+      setImageUrl(`/api/storage/objects/${servingPath}`);
+    },
+    onError: (error) => {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleImageFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Images only", description: "Please select a PNG, JPEG, GIF, or WEBP.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum image size is 5 MB.", variant: "destructive" });
+      return;
+    }
+    await uploadFile(file);
+  };
 
   const { writeContract, data: txHash, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
@@ -159,20 +188,60 @@ export default function CreatePage() {
 
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                    <ImageIcon className="w-3 h-3" /> Token Image URL
+                    <ImageIcon className="w-3 h-3" /> Token Image
                   </Label>
-                  <Input
-                    placeholder="https://..."
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    className="h-9 text-sm bg-background/50"
-                    disabled={isPending || isConfirming}
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageFile(file);
+                    }}
                   />
-                  {imageUrl && (
-                    <div className="mt-2 flex items-center gap-2">
+                  {imageUrl ? (
+                    /* Uploaded — show preview with remove button */
+                    <div className="flex items-center gap-3 p-2 rounded-lg border border-border/40 bg-background/30">
                       <TokenAvatar name={name || "?"} symbol={symbol || "?"} imageUrl={imageUrl} size="md" />
-                      <span className="text-xs text-muted-foreground">Preview</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground">Image ready</p>
+                        <p className="text-xs text-muted-foreground truncate">{imageUrl.split("/").pop()}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageUrl("");
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                        disabled={isPending || isConfirming}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                        aria-label="Remove image"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
+                  ) : (
+                    /* No image — show upload zone */
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading || isPending || isConfirming}
+                      className="w-full h-20 rounded-lg border border-dashed border-border/60 bg-background/30 hover:border-primary/50 hover:bg-primary/5 transition-colors flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          <span className="text-xs font-mono text-primary">{progress}%</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span className="text-xs">Click to upload · PNG, JPEG, GIF, WEBP · max 5 MB</span>
+                        </>
+                      )}
+                    </button>
                   )}
                 </div>
               </div>

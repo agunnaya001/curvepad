@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "wouter";
 import {

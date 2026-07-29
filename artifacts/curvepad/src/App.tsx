@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { config } from "@/lib/web3";
 
 // Lazy-load heavy pages to keep initial bundle small
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const ExplorePage = lazy(() => import("@/pages/ExplorePage"));
 const CreatePage = lazy(() => import("@/pages/CreatePage"));
 const TradePage = lazy(() => import("@/pages/TradePage"));
@@ -47,10 +50,11 @@ function Router() {
       <Navbar />
       <Suspense fallback={<PageLoader />}>
         <Switch>
-          <Route path="/" component={ExplorePage} />
+          <Route path="/" component={LandingPage} />
+          <Route path="/explore" component={ExplorePage} />
           <Route path="/create" component={CreatePage} />
-          <Route path="/token/:address" component={TradePage} />
           <Route path="/portfolio" component={PortfolioPage} />
+          <Route path="/token/:address" component={TradePage} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

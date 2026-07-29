@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Zap } from "lucide-react";

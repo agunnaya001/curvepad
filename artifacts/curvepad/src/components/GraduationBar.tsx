@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { Rocket } from "lucide-react";
 
 const GRADUATION_TARGET_ETH = 10; // ETH — when reserve hits this, token "graduates"

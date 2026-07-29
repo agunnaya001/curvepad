@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { useState, useEffect } from "react";
-import { useAccount, usePublicClient } from "wagmi";
+import { useAccount, usePublicClient, useConnect } from "wagmi";
 import { Link } from "wouter";
 import { base } from "wagmi/chains";
 import { formatEther } from "viem";
@@ -10,13 +12,12 @@ import {
 import { getTokenMetadata, type TokenMeta } from "@/lib/api";
 import { TokenAvatar } from "@/components/TokenAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useConnect } from "wagmi";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  BarChart2, ArrowUpRight, TrendingUp, Wallet, ChevronDown,
+  BarChart2, ArrowUpRight, Wallet, ChevronDown,
   ExternalLink, Zap, RefreshCcw,
 } from "lucide-react";
 
@@ -95,7 +96,6 @@ export default function PortfolioPage() {
 
             const supply = totalSupply as bigint;
             const price = currentPrice as bigint;
-            // Sell return approximation: balance * currentPrice / 1e18 * 0.99 (with 1% fee)
             const valueEth = (Number(balance) / 1e18) * (Number(price) / 1e18) * 0.99;
             const shareOfSupply = supply > BigInt(0)
               ? (Number(balance) / Number(supply)) * 100
@@ -114,11 +114,10 @@ export default function PortfolioPage() {
               shareOfSupply,
               meta,
             });
-          } catch { /* skip */ }
+          } catch { /* skip token if unavailable */ }
         })
       );
 
-      // Sort by value desc
       infos.sort((a, b) => b.valueEth - a.valueEth);
       setHoldings(infos);
       setTotalValueEth(infos.reduce((s, h) => s + h.valueEth, 0));
@@ -246,7 +245,7 @@ export default function PortfolioPage() {
                 You don't hold any CurvePad tokens. Browse tokens and make your first trade.
               </p>
             </div>
-            <Link href="/">
+            <Link href="/explore">
               <Button size="sm" className="gap-1.5">
                 <Zap className="w-3.5 h-3.5" /> Browse Tokens
               </Button>

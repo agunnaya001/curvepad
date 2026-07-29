@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { useRef, useEffect, useState } from "react";
 import { calcCurvePoints, BASE_PRICE, SLOPE } from "@/lib/web3";
 

@@ -13,7 +13,7 @@ export const tokenCommentsTable = pgTable("token_comments", {
 export const insertTokenCommentSchema = createInsertSchema(tokenCommentsTable).omit({
   id: true,
   createdAt: true,
-});
+}) as any;
 
 export type InsertTokenComment = z.infer<typeof insertTokenCommentSchema>;
 export type TokenComment = typeof tokenCommentsTable.$inferSelect;

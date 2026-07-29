@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { Link, useLocation } from "wouter";
 import { useAccount, useConnect, useDisconnect, useBalance } from "wagmi";
 import { useState } from "react";
@@ -37,7 +39,8 @@ export function Navbar() {
     path === "/" ? location === "/" : location.startsWith(path);
 
   const navLinks = [
-    { href: "/", label: "Explore", testid: "link-explore" },
+    { href: "/", label: "Home", testid: "link-home" },
+    { href: "/explore", label: "Explore", testid: "link-explore" },
     { href: "/create", label: "Launch", testid: "link-launch" },
     { href: "/portfolio", label: "Portfolio", testid: "link-portfolio" },
   ];
@@ -85,66 +88,78 @@ export function Navbar() {
           </div>
 
           {isConnected && address ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <>
+              <Link href="/portfolio">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-8 text-xs border-primary/30 hover:border-primary/60 hover:bg-primary/5 gap-2"
-                  data-testid="button-wallet-connected"
+                  className="h-8 text-xs hidden sm:flex gap-2"
+                  data-testid="link-portfolio-icon"
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  {balance && (
-                    <span className="text-muted-foreground hidden sm:inline font-mono">
-                      {Number(formatEther(balance.value)).toFixed(4)} ETH
-                    </span>
-                  )}
-                  <span className="font-mono">{shortenAddress(address)}</span>
-                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  <BarChart2 className="w-3.5 h-3.5" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <div className="px-2 py-1.5">
-                  <p className="text-xs font-mono text-muted-foreground truncate">{address}</p>
-                  {balance && (
-                    <p className="text-sm font-bold font-mono text-foreground mt-0.5">
-                      {Number(formatEther(balance.value)).toFixed(6)} ETH
-                    </p>
-                  )}
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={copyAddress} data-testid="menu-copy-address">
-                  {copied ? <Check className="w-3.5 h-3.5 mr-2 text-primary" /> : <Copy className="w-3.5 h-3.5 mr-2" />}
-                  {copied ? "Copied!" : "Copy address"}
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a
-                    href={`https://basescan.org/address/${address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="link-basescan"
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs border-primary/30 hover:border-primary/60 hover:bg-primary/5 gap-2"
+                    data-testid="button-wallet-connected"
                   >
-                    <ExternalLink className="w-3.5 h-3.5 mr-2" />
-                    View on BaseScan
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/portfolio">
-                    <BarChart2 className="w-3.5 h-3.5 mr-2" />
-                    My Portfolio
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => disconnect()}
-                  className="text-destructive focus:text-destructive"
-                  data-testid="button-disconnect"
-                >
-                  <LogOut className="w-3.5 h-3.5 mr-2" />
-                  Disconnect
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    {balance && (
+                      <span className="text-muted-foreground hidden sm:inline font-mono">
+                        {Number(formatEther(balance.value)).toFixed(4)} ETH
+                      </span>
+                    )}
+                    <span className="font-mono">{shortenAddress(address)}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <div className="px-2 py-1.5">
+                    <p className="text-xs font-mono text-muted-foreground truncate">{address}</p>
+                    {balance && (
+                      <p className="text-sm font-bold font-mono text-foreground mt-0.5">
+                        {Number(formatEther(balance.value)).toFixed(6)} ETH
+                      </p>
+                    )}
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={copyAddress} data-testid="menu-copy-address">
+                    {copied ? <Check className="w-3.5 h-3.5 mr-2 text-primary" /> : <Copy className="w-3.5 h-3.5 mr-2" />}
+                    {copied ? "Copied!" : "Copy address"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={`https://basescan.org/address/${address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="link-basescan"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-2" />
+                      View on BaseScan
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/portfolio">
+                      <BarChart2 className="w-3.5 h-3.5 mr-2" />
+                      My Portfolio
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => disconnect()}
+                    className="text-destructive focus:text-destructive"
+                    data-testid="button-disconnect"
+                  >
+                    <LogOut className="w-3.5 h-3.5 mr-2" />
+                    Disconnect
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

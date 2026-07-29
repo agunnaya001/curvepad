@@ -7,7 +7,7 @@ import "../src/TokenFactory.sol";
 contract DeployV2 is Script {
     function run() external {
         // Handle both "0x..." and raw hex private key formats
-        string memory rawKey = vm.envString("WALLET_PRIVATE_KEY");
+        string memory rawKey = vm.envString("PRIVATE_KEY");
         bytes memory keyBytes;
         if (bytes(rawKey).length >= 2 &&
             bytes(rawKey)[0] == "0" &&

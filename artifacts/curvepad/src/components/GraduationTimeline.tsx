@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024 CurvePad. All rights reserved.
 import { Rocket, TrendingUp, Target, Flame, Waves, ExternalLink } from "lucide-react";
 
 interface GraduationTimelineProps {
