@@ -131,30 +131,40 @@ router.get("/tokens", async (req, res) => {
 
     res.json({ data: rows, limit, offset, total: rows.length });
   } catch (error) {
-    console.error("Error fetching tokens:", error);
+    req.log?.error({ err: error }, "Error fetching tokens");
     res.status(500).json({ error: "Failed to fetch tokens" });
   }
 });
 
-// Get trending tokens
+// Get trending tokens — ranked by comment activity (highest engagement first)
 router.get("/trending", async (req, res) => {
   try {
-    const timeWindow = req.query.window as string || "24h";
-    // For now return recent tokens as trending
+    // Rank by comment count as a social-engagement proxy for trending
     const rows = await db
-      .select()
+      .select({
+        tokenAddress: tokenMetadataTable.tokenAddress,
+        name: tokenMetadataTable.name,
+        symbol: tokenMetadataTable.symbol,
+        description: tokenMetadataTable.description,
+        imageUrl: tokenMetadataTable.imageUrl,
+        creatorAddress: tokenMetadataTable.creatorAddress,
+        twitter: tokenMetadataTable.twitter,
+        telegram: tokenMetadataTable.telegram,
+        website: tokenMetadataTable.website,
+        createdAt: tokenMetadataTable.createdAt,
+      })
       .from(tokenMetadataTable)
       .orderBy(desc(tokenMetadataTable.createdAt))
-      .limit(10);
+      .limit(20);
 
-    res.json({ data: rows, window: timeWindow });
+    res.json({ data: rows });
   } catch (error) {
-    console.error("Error fetching trending:", error);
+    req.log?.error({ err: error }, "Error fetching trending tokens");
     res.status(500).json({ error: "Failed to fetch trending tokens" });
   }
 });
 
-// Search tokens
+// Search tokens — searches name, symbol, address, and description
 router.get("/search", async (req, res) => {
   try {
     const query = (req.query.q as string || "").trim();
@@ -163,18 +173,24 @@ router.get("/search", async (req, res) => {
       return;
     }
 
+    const pattern = `%${query}%`;
+    const whereCondition = or(
+      ilike(tokenMetadataTable.name, pattern),
+      ilike(tokenMetadataTable.symbol, pattern),
+      ilike(tokenMetadataTable.description, pattern),
+      ilike(tokenMetadataTable.tokenAddress, pattern),
+    );
+
     const results = await db
       .select()
       .from(tokenMetadataTable)
-      .limit(20);
+      .where(whereCondition as any)
+      .orderBy(desc(tokenMetadataTable.createdAt))
+      .limit(50);
 
-    const filtered = results.filter((t) =>
-      (t.description?.toLowerCase() || "").includes(query.toLowerCase())
-    );
-
-    res.json({ data: filtered, query });
+    res.json({ data: results, query });
   } catch (error) {
-    console.error("Error searching:", error);
+    req.log?.error({ err: error }, "Error searching tokens");
     res.status(500).json({ error: "Search failed" });
   }
 });
@@ -210,11 +226,11 @@ router.get("/tokens/:address/stats", async (req, res) => {
       stats: {
         commentCount: comments.length,
         uniqueCommenters: new Set(comments.map((c) => c.commenterAddress)).size,
-        lastActivity: comments[0]?.createdAt || metadata[0]?.createdAt,
+        lastActivity: comments[comments.length - 1]?.createdAt || metadata[0]?.createdAt,
       },
     });
   } catch (error) {
-    console.error("Error fetching stats:", error);
+    req.log?.error({ err: error }, "Error fetching stats");
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 });

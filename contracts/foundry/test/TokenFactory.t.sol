@@ -466,7 +466,7 @@ contract TokenFactoryTest is Test {
         token.buy{value: 4 ether}(); // crosses 10 ETH threshold
 
         (bool grad, , uint256 reserve, , ) = token.getGraduationInfo();
-        assertFalse(grad, "Not graduated yet — graduate() not called");
+        assertFalse(grad, "Not graduated yet - graduate() not called");
         assertGe(reserve, 10 ether, "Reserve must be at or above graduation threshold");
 
         // 3. Anyone can trigger graduation
