@@ -27,11 +27,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
-      - run: npm install
+      - run: npm ci
       - run: npx hardhat compile
       - run: npx hardhat test
 
@@ -39,14 +41,22 @@ jobs:
     needs: detect
     if: needs.detect.outputs.saas == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
 
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v4
 
-      - run: npm install
-      - run: npm run build || true
-      - run: npm test || true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
 
   security:
     runs-on: ubuntu-latest
@@ -54,10 +64,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - run: npm audit --audit-level=high || true
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
-      - uses: github/codeql-action/init@v3
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript
 
-      - uses: github/codeql-action/analyze@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
